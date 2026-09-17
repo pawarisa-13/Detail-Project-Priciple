@@ -19,11 +19,11 @@
 
 | ลำดับ | รหัสนักศึกษา | ชื่อ-นามสกุล | Branch | หน้าที่รับผิดชอบ |
 |---|---|---|---|---|
-| 1 | 673380409-0 | นางสาวนันทพร ลุนทอง | `นันทพร_673380409-0_03` | Watch Log, Review & Release Radar |
-| 2 | 673380591-5 | นางสาวปรายฝน ฮกเซ็ง | `ปรายฝน_673380591-5_03` | User & Infrastructure Lead |
-| 3 | 673380592-3 | นางสาวปวริศา สีดาชมภู | `ปวริศา_673380592-3_03` | Movie & External Integration |
+| 1 | 673380409-0 | นางสาวนันทพร ลุนทอง | `นันทพร_673380409-0_01` | Watch Log, Review & Release Radar |
+| 2 | 673380591-5 | นางสาวปรายฝน ฮกเซ็ง | `ปรายฝน_673380591-5_01` | User & Infrastructure Lead |
+| 3 | 673380592-3 | นางสาวปวริศา สีดาชมภู | `ปวริศา_673380592-3_01` | Movie & External Integration |
 
-> ชื่อ branch ด้านบนเป็นตัวอย่างตามรูปแบบที่โจทย์กำหนด (`ชื่อ_รหัสนักศึกษา_section`) 
+> ชื่อ branch ด้านบนเป็นตัวอย่างตามรูปแบบที่โจทย์กำหนด (`ชื่อ_รหัสนักศึกษา_section`) ให้แต่ละคนแทนที่ด้วย section จริงของตนเอง
 
 ---
 
@@ -57,18 +57,25 @@ Dependency เพิ่มเติมที่ต้องใส่เองใ
 
 ### 3.2 เตรียมฐานข้อมูล
 
-เปิด pgAdmin หรือ psql แล้วสร้าง Database สำหรับโปรเจคนี้
+ใช้ **Supabase** (Cloud PostgreSQL) แทน database ที่ลงในเครื่องตัวเอง เพื่อให้ทั้ง 3 คนทำงานกับข้อมูลชุดเดียวกันได้ตลอดเวลา ไม่ต้องคอย sync schema/data กันเอง
 
-```sql
-CREATE DATABASE cinema_log_db;
-```
+> ตามเอกสารข้อ 11 ของโจทย์ระบุไว้ชัดเจนว่า **"ฐานข้อมูลใช้ Cloud DB ได้ (Supabase / Neon / Aiven / Railway Postgres)"** จึงไม่ผิดข้อกำหนด
+
+**ขั้นตอนสร้าง Database บน Supabase**
+
+1. สมัคร/ล็อกอินที่ [supabase.com](https://supabase.com)
+2. สร้าง Project ใหม่ ตั้งชื่อ เช่น `cinema-log-db` แล้วตั้งรหัสผ่าน database ไว้ (เก็บไว้ให้ดี ใช้ต่อใน `application.properties`)
+3. เลือก Region ที่ใกล้ที่สุด (เช่น Singapore) เพื่อ latency ต่ำ
+4. หลังสร้างเสร็จ เข้าไปที่ **Project Settings → Database → Connection string** เพื่อคัดลอกค่าที่ต้องใช้ (host, port, database name, user, password)
+
+> **สำคัญ:** ใช้ **Connection Pooling (Transaction mode, port 6543)** ของ Supabase แทน Direct connection (port 5432) เพราะ Spring Boot เปิด connection หลายเส้นพร้อมกัน ถ้าต่อ direct อาจชนกับ connection limit ของแผนฟรี
 
 ### 3.3 ตั้งค่า application.properties
 
 ```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/cinema_log_db
-spring.datasource.username=postgres
-spring.datasource.password=YOUR_PASSWORD_HERE
+spring.datasource.url=jdbc:postgresql://<PROJECT_REF>.pooler.supabase.com:6543/postgres
+spring.datasource.username=postgres.<PROJECT_REF>
+spring.datasource.password=YOUR_SUPABASE_DB_PASSWORD
 
 spring.jpa.show-sql=true
 spring.jpa.hibernate.ddl-auto=validate
@@ -82,8 +89,78 @@ tmdb.api.base-url=https://api.themoviedb.org/3
 tmdb.api.read-access-token=YOUR_TMDB_TOKEN_HERE
 ```
 
-> **สำคัญ:** เปลี่ยน `YOUR_PASSWORD_HERE` และ `YOUR_TMDB_TOKEN_HERE` เป็นค่าจริงของตนเอง **ห้าม commit ค่าจริงขึ้น GitHub** ให้ใช้ environment variable หรือไฟล์ `application-local.properties` ที่ใส่ไว้ใน `.gitignore` แทน
-> ใช้ `ddl-auto=validate` แทน `update` เพราะโปรเจคนี้ควบคุม schema ผ่าน Flyway migration script ตามข้อกำหนด
+> เปลี่ยน `<PROJECT_REF>` เป็นรหัส project ที่ Supabase สร้างให้ (ดูได้จากหน้า Connection string) และเปลี่ยน `YOUR_SUPABASE_DB_PASSWORD` เป็นรหัสผ่านที่ตั้งไว้ตอนสร้าง project
+>
+> **สำคัญ:** ห้าม commit ค่า connection string/password ตัวจริงขึ้น GitHub เด็ดขาด เพราะทุกคนใช้ฐานข้อมูลตัวเดียวกัน ถ้าหลุดจะกระทบทั้งทีม ให้ทำตามนี้แทน:
+> - สร้างไฟล์ `application-local.properties` ใส่ค่าจริงไว้ แล้วเพิ่มชื่อไฟล์นี้ใน `.gitignore`
+> - หรือใช้ environment variable แล้วอ้างในไฟล์ property เช่น `spring.datasource.password=${DB_PASSWORD}`
+> - แชร์ค่า connection string จริงให้เพื่อนในทีมผ่านช่องทางส่วนตัว (Discord/Line) ไม่ใช่ผ่าน GitHub
+>
+> ใช้ `ddl-auto=validate` แทน `update` เพราะโปรเจคนี้ควบคุม schema ผ่าน Flyway migration script ตามข้อกำหนด — เมื่อใช้ Supabase ร่วมกันหลายคน การคุม schema ผ่าน Flyway ยิ่งสำคัญ เพราะถ้าใครรัน `ddl-auto=update` แทน จะไปแก้ schema กลางโดยไม่ตั้งใจและกระทบเพื่อนทันที
+
+### 3.4 เชื่อมต่อ TMDB API (ดึงข้อมูลหนัง)
+
+**ผู้รับผิดชอบส่วนนี้: ปวริศา (Movie & External Integration)**
+
+ข้อมูลหนังทั้งหมดในระบบ (ชื่อ, โปสเตอร์, เรื่องย่อ, วันฉาย, แนวหนัง) ดึงมาจาก [TMDB](https://www.themoviedb.org/) แล้ว sync เก็บไว้ในตาราง `movies`/`genres` ของเราเอง ไม่เรียก TMDB สดทุกครั้งที่ user เปิดแอป
+
+#### ขั้นตอนที่ 1 — สมัครและขอ API Key
+
+1. สมัครบัญชีที่ [themoviedb.org/signup](https://www.themoviedb.org/signup) แล้วยืนยันอีเมล (แนะนำทำผ่านคอมพิวเตอร์ หน้าลงทะเบียนไม่รองรับมือถือดีนัก)
+2. เข้า **Settings → API** เลือกแพ็กเกจ **Developer** (ฟรี) กรอกรายละเอียดแอปแบบง่ายๆ (ใส่ชื่อโปรเจค/ลิงก์ GitHub repo ก็ได้ถ้ายังไม่มีเว็บจริง)
+3. หลังอนุมัติ จะได้ **API Read Access Token** (Bearer token) — ใช้ตัวนี้แทน `api_key` แบบเก่า เพราะปลอดภัยกว่า
+4. นำ token ไปใส่ใน `application-local.properties` (ห้าม commit ขึ้น GitHub):
+   ```properties
+   tmdb.api.read-access-token=eyJhbGciOiJIUzI1NiJ9.xxxxxxxxxxxxxxxx
+   ```
+
+> **Rate limit:** ประมาณ 40 requests / 10 วินาที ต่อ IP เพียงพอสำหรับใช้งานในโปรเจคเรียน
+
+#### ขั้นตอนที่ 2 — เรียก API ผ่าน TmdbClient
+
+`TmdbClient.java` ใช้ `WebClient` (หรือ `RestTemplate`) ยิงไปที่ endpoint หลักของ TMDB ที่โปรเจคนี้ใช้:
+
+| Endpoint | ใช้ทำอะไร |
+|---|---|
+| `GET /search/movie?query={keyword}` | ค้นหาหนังจากชื่อ |
+| `GET /movie/{tmdb_id}` | ดึงรายละเอียดหนัง 1 เรื่อง |
+| `GET /movie/upcoming` | รายชื่อหนังที่กำลังจะเข้าฉาย (ใช้กับ Release Radar) |
+| `GET /genre/movie/list` | รายการแนวหนังทั้งหมด (ใช้ seed ตาราง `genres`) |
+
+ตัวอย่าง header ที่ต้องแนบไปทุก request:
+```
+Authorization: Bearer {tmdb.api.read-access-token}
+```
+
+#### ขั้นตอนที่ 3 — แปลงข้อมูลผ่าน TmdbMovieAdapter
+
+โครงสร้าง JSON ที่ TMDB ส่งกลับไม่ตรงกับ `Movie` entity ของเราโดยตรง (field ชื่อ, format ต่าง) จึงต้องผ่าน Adapter Pattern ก่อนเสมอ:
+
+```
+TMDB Response (TmdbMovieResponse.java)
+        ↓  TmdbMovieAdapter.toMovieEntity(...)
+Movie Entity ของระบบเรา
+        ↓  save()
+บันทึกลง Supabase (ตาราง movies + movie_genres)
+```
+
+ดูรายละเอียด pattern นี้เพิ่มเติมที่ `doc/design-patterns.md` หัวข้อ Adapter
+
+#### ขั้นตอนที่ 4 — Flow การ sync ข้อมูล
+
+1. Client เรียก `MovieService.syncMovie(tmdbId)` หรือ `searchFromTmdb(keyword)`
+2. `MovieServiceImpl` เรียก `TmdbClient` ไปดึงข้อมูลสดจาก TMDB
+3. ส่งผลลัพธ์ผ่าน `TmdbMovieAdapter` แปลงเป็น `Movie` entity พร้อม map แนวหนังเข้ากับตาราง `Genre` ที่มีอยู่แล้ว (หรือสร้างใหม่ถ้ายังไม่มี)
+4. บันทึกลงฐานข้อมูล Supabase ผ่าน `MovieRepository`
+5. ครั้งต่อไปที่ user ค้นหาหรือดูหนังเรื่องเดิม ระบบดึงจากฐานข้อมูลตัวเองก่อน ไม่ต้องยิง TMDB ซ้ำ (ลด rate limit และเร็วขึ้น)
+6. สำหรับ Release Radar: ตั้ง Scheduled Job เรียก `GET /movie/upcoming` เป็นระยะ เพื่อเช็คว่ามีหนังใหม่ที่ต้องเพิ่มเข้าระบบไหม
+
+#### รูปโปสเตอร์
+
+TMDB ไม่ส่ง URL เต็มมาให้ตรงๆ ต้องต่อเองจาก **base image URL** (ดูได้จาก endpoint `GET /configuration`) รวมกับ path ที่ได้จาก field `poster_path` เช่น:
+```
+https://image.tmdb.org/t/p/w500{poster_path}
+```
 
 ---
 
@@ -397,6 +474,59 @@ cinema-log-release-radar/
 
 ---
 
+## 7.7 Controller & REST API Endpoints
+
+Controller ทำหน้าที่รับ Request จาก Client แล้วส่งต่อให้ Service เท่านั้น ห้ามมี business logic หรือเรียก Repository ตรงในชั้นนี้เด็ดขาด
+
+### UserController — ผู้รับผิดชอบ: ปรายฝน
+
+| Method | Endpoint | ทำงานอะไร | Status Code |
+|---|---|---|---|
+| POST | `/api/v1/users` | สมัครผู้ใช้ใหม่ (เรียก `UserService.register`) | `201 Created`, `400 Bad Request` (validation) |
+| GET | `/api/v1/users/{id}` | ดูข้อมูลผู้ใช้ | `200 OK`, `404 Not Found` |
+| PUT | `/api/v1/users/{id}/profile` | แก้ไขโปรไฟล์ (bio, avatar, ช่องทางแจ้งเตือน) | `200 OK`, `404 Not Found` |
+
+### MovieController — ผู้รับผิดชอบ: ปวริศา
+
+| Method | Endpoint | ทำงานอะไร | Status Code |
+|---|---|---|---|
+| GET | `/api/v1/movies?page=0&size=10&sort=releaseDate` | รายการหนัง พร้อม pagination & sorting | `200 OK` |
+| GET | `/api/v1/movies/{id}` | ดูรายละเอียดหนัง 1 เรื่อง | `200 OK`, `404 Not Found` |
+| GET | `/api/v1/movies/search?keyword=` | ค้นหาหนังจาก TMDB (เรียก `MovieService.searchFromTmdb`) | `200 OK` |
+| POST | `/api/v1/movies/sync/{tmdbId}` | สั่ง sync ข้อมูลหนังจาก TMDB เข้าฐานข้อมูลตัวเอง | `201 Created`, `500 Internal Server Error` (TMDB ล่ม) |
+
+### WatchLogController — ผู้รับผิดชอบ: นันทพร
+
+| Method | Endpoint | ทำงานอะไร | Status Code |
+|---|---|---|---|
+| POST | `/api/v1/movies/{movieId}/watch-logs` | บันทึกว่า user ดูหนังเรื่องนี้แล้ว | `201 Created`, `404 Not Found` (ไม่มีหนัง), `400 Bad Request` |
+| GET | `/api/v1/users/{userId}/watch-logs` | ดูประวัติการดูหนังทั้งหมดของ user | `200 OK` |
+| DELETE | `/api/v1/watch-logs/{id}` | ลบ log ที่บันทึกผิด | `204 No Content`, `404 Not Found` |
+
+### ReviewController — ผู้รับผิดชอบ: นันทพร
+
+| Method | Endpoint | ทำงานอะไร | Status Code |
+|---|---|---|---|
+| POST | `/api/v1/movies/{movieId}/reviews` | เขียนรีวิวหนัง | `201 Created`, `400 Bad Request` |
+| GET | `/api/v1/movies/{movieId}/reviews` | ดูรีวิวทั้งหมดของหนังเรื่องนั้น | `200 OK` |
+
+### ReleaseAlertController — ผู้รับผิดชอบ: นันทพร
+
+| Method | Endpoint | ทำงานอะไร | Status Code |
+|---|---|---|---|
+| POST | `/api/v1/users/{userId}/release-alerts` | ตั้งเตือนหนังที่ยังไม่ฉาย | `201 Created`, `409 Conflict` (ตั้งซ้ำ) |
+| GET | `/api/v1/users/{userId}/release-alerts` | ดูรายการที่ตั้งเตือนไว้ทั้งหมด | `200 OK` |
+| DELETE | `/api/v1/release-alerts/{id}` | ยกเลิกการติดตาม | `204 No Content`, `404 Not Found` |
+
+### กฎที่ต้องยึดทุก Controller
+
+- ตั้งชื่อ endpoint แบบ **Resource-based** เช่น `/api/v1/movies/{id}/watch-logs` ไม่ใช้ verb ในชื่อ path (`/getMovies` ❌)
+- ทุก Controller ใช้ **Constructor Injection** รับ Service เข้ามาเท่านั้น
+- Error ทุกแบบให้ปล่อยผ่าน `GlobalExceptionHandler` (`@RestControllerAdvice`) จัดการรวมที่เดียว ไม่ try-catch เองในแต่ละ Controller
+- ใช้ `@Valid` กับทุก Request Body ที่มี DTO เพื่อเช็ค validation ก่อนเข้า Service
+
+---
+
 ## 8. GoF Patterns (เลือกกลุ่ม Behavioral — 3 แบบ)
 
 | Pattern | ปัญหาที่แก้ | ไฟล์/คลาสที่ใช้ | ผู้รับผิดชอบ |
@@ -539,7 +669,7 @@ docs: update solid-analysis.md
 ## Tech Stack
 
 - **Backend:** Spring Boot 3.x (Java 17+), Spring Data JPA (Hibernate)
-- **Database:** PostgreSQL + Flyway Migration
+- **Database:** Supabase (Cloud PostgreSQL) + Flyway Migration
 - **API Docs:** Swagger / OpenAPI (`/swagger-ui.html`)
 - **Frontend:** React (หรือ Thymeleaf)
 - **Testing:** JUnit 5 + Mockito + Spring Boot Test
